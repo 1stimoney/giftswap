@@ -1,12 +1,8 @@
 // app/admin/page.tsx
-import { createClient } from '@/lib/supabaseClient'
+
+import { supabase } from '@/lib/supabaseClient'
 
 export default async function AdminDashboard() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
   const { count: usersCount } = await supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })

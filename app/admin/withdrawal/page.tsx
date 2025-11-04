@@ -48,7 +48,7 @@ export default function WithdrawalsAdminPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setWithdrawals(data)
+      setWithdrawals(data as unknown as Withdrawal[])
     } catch (err) {
       console.error('Error fetching withdrawals:', err)
     } finally {

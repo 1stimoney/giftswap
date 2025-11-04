@@ -3,15 +3,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabaseClient'
 import { Button } from '@/components/ui/button'
+import { supabase } from '@/lib/supabaseClient'
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([])
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
 
   useEffect(() => {
     const fetchUsers = async () => {

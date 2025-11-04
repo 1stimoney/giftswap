@@ -1,7 +1,13 @@
 'use client'
 
-import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface Trade {
   id: string
@@ -12,7 +18,8 @@ interface Trade {
   rate: number
   amount_usd: number
   total: number
-  image_url: string
+  image_url?: string
+  image_urls?: string[] | string
   status: string
   created_at: string
 }
@@ -21,7 +28,7 @@ export default function TradesPage() {
   const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [updating, setUpdating] = useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTrades()
@@ -54,11 +61,6 @@ export default function TradesPage() {
 
   const updateTradeStatus = async (tradeId: string, newStatus: string) => {
     try {
-      if (!tradeId) {
-        console.error('❌ Missing trade ID:', tradeId)
-        return alert('Trade ID is missing!')
-      }
-
       const res = await fetch(`/api/trades/${tradeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -77,6 +79,19 @@ export default function TradesPage() {
       console.error('Error updating trade:', error)
       alert('An error occurred while updating trade status')
     }
+  }
+
+  const parseImageUrls = (trade: Trade): string[] => {
+    try {
+      if (Array.isArray(trade.image_urls)) return trade.image_urls
+      if (typeof trade.image_urls === 'string') {
+        const parsed = JSON.parse(trade.image_urls)
+        if (Array.isArray(parsed)) return parsed
+      }
+    } catch (err) {
+      console.warn('Error parsing image_urls:', err)
+    }
+    return trade.image_url ? [trade.image_url] : []
   }
 
   if (loading) return <p className='text-center py-10'>Loading trades...</p>
@@ -100,68 +115,101 @@ export default function TradesPage() {
               <th className='p-3 text-left'>Total (NGN)</th>
               <th className='p-3 text-left'>Status</th>
               <th className='p-3 text-left'>Date</th>
-              <th className='p-3 text-left'>Image</th>
+              <th className='p-3 text-left'>Images</th>
               <th className='p-3 text-left'>Action</th>
             </tr>
           </thead>
 
           <tbody>
-            {trades.map((trade) => (
-              <tr key={trade.id} className='border-t'>
-                <td className='p-3'>{trade.user_name}</td>
-                <td className='p-3'>{trade.user_email}</td>
-                <td className='p-3'>{trade.card_name}</td>
-                <td className='p-3'>{trade.rate}</td>
-                <td className='p-3'>{trade.amount_usd}</td>
-                <td className='p-3 font-medium'>{trade.total}</td>
-                <td
-                  className={`p-3 font-medium ${
-                    trade.status === 'approved'
-                      ? 'text-green-600'
-                      : trade.status === 'pending'
-                      ? 'text-yellow-600'
-                      : 'text-red-600'
-                  }`}
-                >
-                  {trade.status}
-                </td>
-                <td className='p-3'>
-                  {new Date(trade.created_at).toLocaleString()}
-                </td>
-                <td className='p-3'>
-                  {trade.image_url ? (
-                    <img
-                      src={trade.image_url}
-                      alt='Trade'
-                      className='w-14 h-14 object-cover rounded-md border'
-                    />
-                  ) : (
-                    'No image'
-                  )}
-                </td>
-                <td className='p-3 flex gap-2'>
-                  {trade.status === 'pending' && (
-                    <>
-                      <Button
-                        onClick={() => updateTradeStatus(trade.id, 'approved')}
-                        className='bg-green-600 text-white'
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        onClick={() => updateTradeStatus(trade.id, 'rejected')}
-                        className='bg-red-600 text-white'
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {trades.map((trade) => {
+              const images = parseImageUrls(trade)
+
+              return (
+                <tr key={trade.id} className='border-t hover:bg-gray-50'>
+                  <td className='p-3'>{trade.user_name}</td>
+                  <td className='p-3'>{trade.user_email}</td>
+                  <td className='p-3'>{trade.card_name}</td>
+                  <td className='p-3'>{trade.rate}</td>
+                  <td className='p-3'>{trade.amount_usd}</td>
+                  <td className='p-3 font-medium'>{trade.total}</td>
+                  <td
+                    className={`p-3 font-medium ${
+                      trade.status === 'approved'
+                        ? 'text-green-600'
+                        : trade.status === 'pending'
+                        ? 'text-yellow-600'
+                        : 'text-red-600'
+                    }`}
+                  >
+                    {trade.status}
+                  </td>
+                  <td className='p-3'>
+                    {new Date(trade.created_at).toLocaleString()}
+                  </td>
+                  <td className='p-3'>
+                    {images.length > 0 ? (
+                      <div className='flex gap-2 overflow-x-auto max-w-[180px]'>
+                        {images.map((url, i) => (
+                          <img
+                            key={i}
+                            src={url}
+                            alt={`Trade ${trade.id} image ${i + 1}`}
+                            className='w-16 h-16 object-cover rounded-md border cursor-pointer hover:opacity-80 transition'
+                            onClick={() => setSelectedImage(url)}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <span className='text-gray-400 text-sm'>No image</span>
+                    )}
+                  </td>
+                  <td className='p-3 flex gap-2'>
+                    {trade.status === 'pending' && (
+                      <>
+                        <Button
+                          onClick={() =>
+                            updateTradeStatus(trade.id, 'approved')
+                          }
+                          className='bg-green-600 text-white hover:bg-green-700'
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            updateTradeStatus(trade.id, 'rejected')
+                          }
+                          className='bg-red-600 text-white hover:bg-red-700'
+                        >
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* 🖼️ Image Preview Modal */}
+      <Dialog
+        open={!!selectedImage}
+        onOpenChange={() => setSelectedImage(null)}
+      >
+        <DialogContent className='max-w-3xl'>
+          <DialogHeader>
+            <DialogTitle>Trade Image</DialogTitle>
+          </DialogHeader>
+          {selectedImage && (
+            <img
+              src={selectedImage}
+              alt='Preview'
+              className='w-full h-auto rounded-lg shadow-md'
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
