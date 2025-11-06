@@ -1,6 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -8,6 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { Loader2 } from 'lucide-react'
 
 interface Trade {
   id: string
@@ -32,31 +36,73 @@ export default function TradesPage() {
 
   useEffect(() => {
     fetchTrades()
+
+    const channel = supabase
+      .channel('public:trades')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trades',
+        },
+        (payload) => {
+          console.log('📡 Realtime change:', payload)
+          handleRealtimeUpdate(payload)
+        }
+      )
+      .subscribe(async (status) => {
+        console.log('Realtime channel status:', status)
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscribed to trades realtime updates')
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   const fetchTrades = async () => {
     try {
       const res = await fetch('/api/trades', { cache: 'no-store' })
-      const contentType = res.headers.get('content-type')
-
       if (!res.ok) {
         setError('Failed to fetch trades')
         return
       }
 
-      if (contentType?.includes('application/json')) {
-        const data = await res.json()
-        if (Array.isArray(data)) setTrades(data)
-        else setError('Invalid data format')
-      } else {
-        setError('Unexpected response type')
-      }
+      const data = await res.json()
+      if (Array.isArray(data)) setTrades(data)
+      else setError('Invalid data format')
     } catch (err) {
       console.error('Error fetching trades:', err)
       setError('Error fetching trades')
     } finally {
       setLoading(false)
     }
+  }
+
+  // 🧩 Handle real-time insert/update/delete
+  const handleRealtimeUpdate = (payload: any) => {
+    setTrades((prevTrades) => {
+      const eventType = payload.eventType
+      const newTrade = payload.new
+      const oldTrade = payload.old
+
+      if (eventType === 'INSERT') {
+        return [newTrade, ...prevTrades]
+      }
+
+      if (eventType === 'UPDATE') {
+        return prevTrades.map((t) => (t.id === newTrade.id ? newTrade : t))
+      }
+
+      if (eventType === 'DELETE') {
+        return prevTrades.filter((t) => t.id !== oldTrade.id)
+      }
+
+      return prevTrades
+    })
   }
 
   const updateTradeStatus = async (tradeId: string, newStatus: string) => {
@@ -73,8 +119,7 @@ export default function TradesPage() {
         return alert('Failed to update trade status')
       }
 
-      alert('Trade status updated successfully ✅')
-      fetchTrades()
+      alert('✅ Trade status updated successfully')
     } catch (error) {
       console.error('Error updating trade:', error)
       alert('An error occurred while updating trade status')
@@ -94,29 +139,49 @@ export default function TradesPage() {
     return trade.image_url ? [trade.image_url] : []
   }
 
-  if (loading) return <p className='text-center py-10'>Loading trades...</p>
-  if (error) return <p className='text-center text-red-500 py-10'>{error}</p>
+  // 🌀 Loading and Error States
+  if (loading)
+    return (
+      <div className='flex justify-center items-center min-h-screen'>
+        <Loader2 className='w-6 h-6 text-blue-600 animate-spin mr-2' />
+        <p className='text-gray-600 font-medium'>Loading trades...</p>
+      </div>
+    )
+
+  if (error)
+    return (
+      <div className='flex justify-center items-center min-h-screen text-red-600 text-lg'>
+        {error}
+      </div>
+    )
+
   if (trades.length === 0)
-    return <p className='text-center py-10'>No trades found</p>
+    return (
+      <div className='flex justify-center items-center min-h-screen text-gray-600 text-lg'>
+        No trades found
+      </div>
+    )
 
   return (
-    <div className='p-6'>
-      <h1 className='text-2xl font-semibold mb-6 text-center'>All Trades</h1>
+    <div className='max-w-7xl mx-auto py-10 px-4'>
+      <h1 className='text-3xl font-bold mb-8 text-gray-900 text-center'>
+        💱 All Trades
+      </h1>
 
-      <div className='overflow-x-auto'>
-        <table className='min-w-full border border-gray-300 rounded-lg overflow-hidden'>
-          <thead className='bg-gray-100'>
-            <tr>
-              <th className='p-3 text-left'>User</th>
-              <th className='p-3 text-left'>Email</th>
-              <th className='p-3 text-left'>Card</th>
-              <th className='p-3 text-left'>Rate</th>
-              <th className='p-3 text-left'>Amount (USD)</th>
-              <th className='p-3 text-left'>Total (NGN)</th>
-              <th className='p-3 text-left'>Status</th>
-              <th className='p-3 text-left'>Date</th>
-              <th className='p-3 text-left'>Images</th>
-              <th className='p-3 text-left'>Action</th>
+      <div className='overflow-x-auto bg-white shadow rounded-xl border border-gray-200'>
+        <table className='min-w-full border-collapse text-sm'>
+          <thead className='bg-gray-50'>
+            <tr className='text-left text-gray-700 font-semibold'>
+              <th className='p-4'>User</th>
+              <th className='p-4'>Email</th>
+              <th className='p-4'>Card</th>
+              <th className='p-4'>Rate</th>
+              <th className='p-4'>Amount (USD)</th>
+              <th className='p-4'>Total (NGN)</th>
+              <th className='p-4'>Status</th>
+              <th className='p-4'>Date</th>
+              <th className='p-4'>Images</th>
+              <th className='p-4'>Action</th>
             </tr>
           </thead>
 
@@ -125,36 +190,48 @@ export default function TradesPage() {
               const images = parseImageUrls(trade)
 
               return (
-                <tr key={trade.id} className='border-t hover:bg-gray-50'>
-                  <td className='p-3'>{trade.user_name}</td>
-                  <td className='p-3'>{trade.user_email}</td>
-                  <td className='p-3'>{trade.card_name}</td>
-                  <td className='p-3'>{trade.rate}</td>
-                  <td className='p-3'>{trade.amount_usd}</td>
-                  <td className='p-3 font-medium'>{trade.total}</td>
-                  <td
-                    className={`p-3 font-medium ${
-                      trade.status === 'approved'
-                        ? 'text-green-600'
-                        : trade.status === 'pending'
-                        ? 'text-yellow-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {trade.status}
+                <tr
+                  key={trade.id}
+                  className='border-t border-gray-100 hover:bg-gray-50 transition-all'
+                >
+                  <td className='p-4 font-medium'>{trade.user_name}</td>
+                  <td className='p-4 text-gray-700'>{trade.user_email}</td>
+                  <td className='p-4'>{trade.card_name}</td>
+                  <td className='p-4'>₦{trade.rate}</td>
+                  <td className='p-4'>${trade.amount_usd}</td>
+                  <td className='p-4 font-semibold text-gray-900'>
+                    ₦{trade.total.toLocaleString()}
                   </td>
-                  <td className='p-3'>
+                  <td className='p-4'>
+                    <Badge
+                      variant={
+                        trade.status === 'approved'
+                          ? 'default'
+                          : trade.status === 'pending'
+                          ? 'secondary'
+                          : 'destructive'
+                      }
+                      className={`${
+                        trade.status === 'pending'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : ''
+                      }`}
+                    >
+                      {trade.status.toUpperCase()}
+                    </Badge>
+                  </td>
+                  <td className='p-4'>
                     {new Date(trade.created_at).toLocaleString()}
                   </td>
-                  <td className='p-3'>
+                  <td className='p-4'>
                     {images.length > 0 ? (
-                      <div className='flex gap-2 overflow-x-auto max-w-[180px]'>
+                      <div className='flex gap-2 overflow-x-auto max-w-[200px]'>
                         {images.map((url, i) => (
                           <img
                             key={i}
                             src={url}
                             alt={`Trade ${trade.id} image ${i + 1}`}
-                            className='w-16 h-16 object-cover rounded-md border cursor-pointer hover:opacity-80 transition'
+                            className='w-14 h-14 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition'
                             onClick={() => setSelectedImage(url)}
                           />
                         ))}
@@ -163,9 +240,9 @@ export default function TradesPage() {
                       <span className='text-gray-400 text-sm'>No image</span>
                     )}
                   </td>
-                  <td className='p-3 flex gap-2'>
+                  <td className='p-4'>
                     {trade.status === 'pending' && (
-                      <>
+                      <div className='flex gap-2'>
                         <Button
                           onClick={() =>
                             updateTradeStatus(trade.id, 'approved')
@@ -182,7 +259,7 @@ export default function TradesPage() {
                         >
                           Reject
                         </Button>
-                      </>
+                      </div>
                     )}
                   </td>
                 </tr>

@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../../lib/supabaseClient'
-import styles from './withdrawal.module.css'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Loader2 } from 'lucide-react'
 
 interface Bank {
   id: string
@@ -31,6 +34,7 @@ export default function WithdrawalsAdminPage() {
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
   const [loading, setLoading] = useState(true)
 
+  // ✅ Fetch withdrawals
   const fetchWithdrawals = async () => {
     try {
       const { data, error } = await supabase
@@ -56,16 +60,12 @@ export default function WithdrawalsAdminPage() {
     }
   }
 
-  useEffect(() => {
-    fetchWithdrawals()
-  }, [])
-
+  // ✅ Update withdrawal status
   const handleUpdateStatus = async (
     withdrawal: Withdrawal,
     newStatus: 'approved' | 'rejected'
   ) => {
     try {
-      // Only deduct balance if approved
       if (newStatus === 'approved') {
         const newBalance = withdrawal.user.balance - withdrawal.amount
         const { error: balanceError } = await supabase
@@ -75,7 +75,6 @@ export default function WithdrawalsAdminPage() {
         if (balanceError) throw balanceError
       }
 
-      // Update withdrawal status
       const { error: updateError } = await supabase
         .from('withdrawals')
         .update({ status: newStatus })
@@ -83,58 +82,121 @@ export default function WithdrawalsAdminPage() {
       if (updateError) throw updateError
 
       alert('Withdrawal updated successfully')
-      fetchWithdrawals()
     } catch (err) {
       console.error(err)
       alert('Failed to update withdrawal')
     }
   }
 
-  if (loading) return <p>Loading withdrawals...</p>
+  // ✅ Initial fetch
+  useEffect(() => {
+    fetchWithdrawals()
+  }, [])
 
-  if (withdrawals.length === 0) return <p>No withdrawals found</p>
+  // ✅ Real-time updates using Supabase channel
+  useEffect(() => {
+    const channel = supabase
+      .channel('withdrawals-updates')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'withdrawals' },
+        async () => {
+          // refetch when new/updated/deleted withdrawal occurs
+          await fetchWithdrawals()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
+
+  // ✅ UI rendering
+  if (loading)
+    return (
+      <div className='flex justify-center items-center min-h-screen'>
+        <Loader2 className='animate-spin text-blue-600 w-6 h-6 mr-2' />
+        <p className='text-gray-600 font-medium'>Loading withdrawals...</p>
+      </div>
+    )
+
+  if (withdrawals.length === 0)
+    return (
+      <div className='flex justify-center items-center min-h-screen text-gray-600 text-lg'>
+        No withdrawals found
+      </div>
+    )
 
   return (
-    <div className={styles.container}>
-      <h1 className={styles.title}>Withdrawal Requests</h1>
-      <div className={styles.list}>
+    <div className='max-w-6xl mx-auto py-10 px-4'>
+      <h1 className='text-3xl font-bold mb-8 text-gray-900'>
+        💳 Withdrawal Requests
+      </h1>
+
+      <div className='grid gap-6 sm:grid-cols-2 lg:grid-cols-3'>
         {withdrawals.map((w) => (
-          <div key={w.id} className={styles.card}>
-            <div className={styles.info}>
-              <p>
-                <strong>User:</strong> {w.user.username} ({w.user.email})
-              </p>
-              <p>
-                <strong>Bank:</strong> {w.bank.bank_name} -{' '}
-                {w.bank.account_number} ({w.bank.account_name})
-              </p>
-              <p>
-                <strong>Amount:</strong> ₦{w.amount.toLocaleString()}
-              </p>
-              <p>
-                <strong>Status:</strong> {w.status}
-              </p>
-              <p>
-                <strong>Date:</strong> {new Date(w.created_at).toLocaleString()}
-              </p>
-            </div>
-            {w.status === 'pending' && (
-              <div className={styles.actions}>
-                <button
-                  className={styles.approveBtn}
-                  onClick={() => handleUpdateStatus(w, 'approved')}
+          <Card
+            key={w.id}
+            className='shadow-sm border border-gray-200 hover:shadow-md transition-all'
+          >
+            <CardHeader>
+              <CardTitle className='text-lg font-semibold flex justify-between items-center'>
+                <span>{w.user.username}</span>
+                <Badge
+                  variant={
+                    w.status === 'approved'
+                      ? 'default'
+                      : w.status === 'rejected'
+                      ? 'destructive'
+                      : 'secondary'
+                  }
+                  className={
+                    w.status === 'pending'
+                      ? 'bg-yellow-100 text-yellow-700'
+                      : ''
+                  }
                 >
-                  Approve
-                </button>
-                <button
-                  className={styles.rejectBtn}
-                  onClick={() => handleUpdateStatus(w, 'rejected')}
-                >
-                  Reject
-                </button>
-              </div>
-            )}
-          </div>
+                  {w.status.toUpperCase()}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className='space-y-3 text-sm text-gray-700'>
+              <p>
+                <span className='font-semibold'>Email:</span> {w.user.email}
+              </p>
+              <p>
+                <span className='font-semibold'>Bank:</span> {w.bank.bank_name}{' '}
+                — {w.bank.account_number} ({w.bank.account_name})
+              </p>
+              <p>
+                <span className='font-semibold'>Amount:</span> ₦
+                {w.amount.toLocaleString()}
+              </p>
+              <p>
+                <span className='font-semibold'>Date:</span>{' '}
+                {new Date(w.created_at).toLocaleString()}
+              </p>
+
+              {w.status === 'pending' && (
+                <div className='flex gap-3 pt-3'>
+                  <Button
+                    onClick={() => handleUpdateStatus(w, 'approved')}
+                    className='bg-green-600 hover:bg-green-700 text-white flex-1'
+                  >
+                    Approve
+                  </Button>
+                  <Button
+                    onClick={() => handleUpdateStatus(w, 'rejected')}
+                    className='bg-red-600 hover:bg-red-700 text-white flex-1'
+                  >
+                    Reject
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         ))}
       </div>
     </div>
