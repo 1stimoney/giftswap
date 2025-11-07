@@ -14,6 +14,8 @@ import {
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import clsx from 'clsx'
+import { Toaster } from '@/components/ui/sonner'
+import { AdminRealtimeListener } from '@/components/admin-realtime-listener'
 
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
@@ -76,6 +78,13 @@ export default function AdminLayout({
 
   return (
     <div className='flex min-h-screen bg-gray-50'>
+      {/* ✅ Global Toast Listener */}
+      <AdminRealtimeListener />
+
+      {/* ✅ Global Toast UI */}
+      <Toaster richColors position='top-right' />
+
+      {/* ✅ Admin content */}
       {/* Sidebar */}
       <aside className='w-64 bg-white border-r border-gray-200 hidden md:flex flex-col'>
         <div className='px-6 py-4 border-b'>

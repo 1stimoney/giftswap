@@ -84,3 +84,6 @@ export async function PATCH(
     { status: 200 }
   )
 }
+
+export const revalidate = 0
+export const dynamic = 'force-dynamic'

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface Bank {
   id: string
@@ -55,6 +56,7 @@ export default function WithdrawalsAdminPage() {
       setWithdrawals(data as unknown as Withdrawal[])
     } catch (err) {
       console.error('Error fetching withdrawals:', err)
+      toast.error('Failed to load withdrawals. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -66,6 +68,9 @@ export default function WithdrawalsAdminPage() {
     newStatus: 'approved' | 'rejected'
   ) => {
     try {
+      toast.loading(`Processing ${newStatus} request...`)
+
+      // If approved, deduct user balance
       if (newStatus === 'approved') {
         const newBalance = withdrawal.user.balance - withdrawal.amount
         const { error: balanceError } = await supabase
@@ -75,16 +80,20 @@ export default function WithdrawalsAdminPage() {
         if (balanceError) throw balanceError
       }
 
+      // Update withdrawal status
       const { error: updateError } = await supabase
         .from('withdrawals')
         .update({ status: newStatus })
         .eq('id', withdrawal.id)
+
       if (updateError) throw updateError
 
-      alert('Withdrawal updated successfully')
+      toast.dismiss()
+      toast.success(`Withdrawal ${newStatus} successfully.`)
     } catch (err) {
       console.error(err)
-      alert('Failed to update withdrawal')
+      toast.dismiss()
+      toast.error('Failed to update withdrawal. Please try again.')
     }
   }
 
@@ -100,9 +109,14 @@ export default function WithdrawalsAdminPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'withdrawals' },
-        async () => {
-          // refetch when new/updated/deleted withdrawal occurs
+        async (payload) => {
+          console.log('Realtime update received:', payload)
           await fetchWithdrawals()
+
+          // Show a toast when new withdrawal is added
+          if (payload.eventType === 'INSERT') {
+            toast.info('New withdrawal request received.')
+          }
         }
       )
       .subscribe()
