@@ -10,6 +10,7 @@ import {
   Users,
   CreditCard,
   ArrowDownCircle,
+  DollarSign,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
@@ -19,6 +20,7 @@ import { AdminRealtimeListener } from '@/components/admin-realtime-listener'
 
 const navItems = [
   { name: 'Dashboard', icon: LayoutDashboard, href: '/admin' },
+  { name: 'Gift Cards', icon: DollarSign, href: '/admin/giftcards' },
   { name: 'Trades', icon: CreditCard, href: '/admin/trades' },
   { name: 'Withdrawals', icon: ArrowDownCircle, href: '/admin/withdrawal' },
   { name: 'Users', icon: Users, href: '/admin/users' },
